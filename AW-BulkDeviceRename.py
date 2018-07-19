@@ -6,9 +6,9 @@ import base64
 serialnamedict = {}
 
 #Change url to your host
-url = "https://host.awmdm.com/api/mdm/devices"
+url = "https://cn858.awmdm.com/api/mdm/devices"
 #Add your api key
-aw_tenant_code = "apikey"
+aw_tenant_code = "nRZwFycPyPTUHyBT9kWfLOtZvCuR8IJ6Nu3Omhc9hBk="
 accept_type = "application/json;version=1"
 content_type = "application/json;version=1"
 auth_cred = "Basic empty"
@@ -48,34 +48,40 @@ def getbasic_authuser():
     encodedString = base64.urlsafe_b64encode(credentials.encode('UTF-8')).decode('ascii')
     return "Basic " + encodedString
 
-# It's a good idea to enclose the following in a try-except format.
-try:
-    #response = requests.request("PUT", url, data=payload, headers=headers, params=querystring)
 
-    #enter AirWatch user credentials
-    auth_cred = getbasic_authuser()
+#response = requests.request("PUT", url, data=payload, headers=headers, params=querystring)
 
-    #Build the header after getting credentials
-    headers = build_header(aw_tenant_code, accept_type, content_type, auth_cred)
-    
-    with open('input_serial.csv', 'r') as csvfile:
-        read = csv.reader(csvfile, delimiter=',', quotechar='|')
-        next(read, None) #skip the header in csv
-        for row in read:
-            #name = (row[0]) and serial = (row[1])
-            #store values in dictionary to maintain key value pairs
-            serialnamedict[row[1]] = row[0]
-        
-        #Traverse the dictionary updating names by doing a serial lookup
-        for serialval in serialnamedict:
-            serial = serialval
-            devicename = serialnamedict[serialval]
-            print(serial + ": " + devicename)
-            response = requests.request("PUT", url, data=build_payload(devicename), headers=headers, params=build_querystring(serial))
-            if response.status_code == 204:
-                print("Success!")
-            else:
-                print("Error, check credentials, api key, or mdm url")
-           
-except requests.exceptions.RequestException as e:
-    print('Get request failed with %s' % e)
+#enter AirWatch user credentials
+auth_cred = getbasic_authuser()
+
+#Build the header after getting credentials
+headers = build_header(aw_tenant_code, accept_type, content_type, auth_cred)
+
+with open('input_serial.csv', 'r') as csvfile:
+    read = csv.reader(csvfile, delimiter=',', quotechar='|')
+    next(read, None) #skip the header in csv
+    for row in read:
+        #name = (row[0]) and serial = (row[1])
+        #store values in dictionary to maintain key value pairs
+        serialnamedict[row[1]] = row[0]
+
+#Traverse the dictionary updating names by doing a serial lookup
+for serialval in serialnamedict:
+    serial = serialval
+    devicename = serialnamedict[serialval]
+    print(serial + ": " + devicename)
+    # Try to make the API call
+    try:
+        # Update device, using SerialNumber as the identifier
+        response = requests.request("PUT", url, data=build_payload(devicename), headers=headers, params=build_querystring(serial))
+
+        # If the above gives a 4XX or 5XX error
+        response.raise_for_status()
+        if response.status_code == 204:
+            print("Success!")
+        else:
+            print("Error, check credentials, api key, or mdm url")
+            
+    # If the API call fails
+    except requests.exceptions.RequestException as e:
+        print('Request failed with %s' % e)
