@@ -6,9 +6,9 @@ import base64
 serialnamedict = {}
 
 #Change url to your host
-url = "https://cn858.awmdm.com/api/mdm/devices"
+url = "https://host.awmdm.com/api/mdm/devices"
 #Add your api key
-aw_tenant_code = "nRZwFycPyPTUHyBT9kWfLOtZvCuR8IJ6Nu3Omhc9hBk="
+aw_tenant_code = "apikey"
 accept_type = "application/json;version=1"
 content_type = "application/json;version=1"
 auth_cred = "Basic empty"
