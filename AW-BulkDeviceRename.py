@@ -20,7 +20,7 @@ headers = {
     }
 
 def build_querystring(serialnumber):
-    #Format example {"searchBy":"Serialnumber","id":"F9FTPXCPHLJJ"}
+    #Format example {"searchBy":"Serialnumber","id":"AAAAAAAAAAAA"}
     query = {"searchby":"Serialnumber",
              "id": serialnumber}
     return query
