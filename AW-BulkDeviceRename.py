@@ -1,12 +1,15 @@
 import requests
+import json
 import csv
 import getpass
 import base64
 
 serialnamedict = {}
+masterserialname = {}
+errorserial = []
 
 #Change url to your host
-url = "https://host.awmdm.com/api/mdm/devices"
+baseurl = "https://host.awmdm.com"
 #Add your api key
 aw_tenant_code = "apikey"
 accept_type = "application/json;version=1"
@@ -20,7 +23,7 @@ headers = {
     }
 
 def build_querystring(serialnumber):
-    #Format example {"searchBy":"Serialnumber","id":"AAAAAAAAAAAA"}
+    #Format example {"searchBy":"Serialnumber","id":"AAABBBCCCDDDEE"}
     query = {"searchby":"Serialnumber",
              "id": serialnumber}
     return query
@@ -48,29 +51,30 @@ def getbasic_authuser():
     encodedString = base64.urlsafe_b64encode(credentials.encode('UTF-8')).decode('ascii')
     return "Basic " + encodedString
 
+def get_deviceid(baseurl, headers, serial):
+    url = "%s/api/mdm/devices" % baseurl
+    query = {"searchby": "Serialnumber", "id": serial}
+    try:
+        response = requests.request("GET", url, headers=headers, params=query)
+        data = json.loads(response.text)
+        return data['Id']['Value']
+    except requests.exceptions.RequestException as e:
+        return print('Request failed with %s' % e)
 
-#response = requests.request("PUT", url, data=payload, headers=headers, params=querystring)
+def change_ou(headers, deviceid, groupid):
+    url = "%s/api/mdm/devices/%s/commands/changeorganizationgroup/%s" % (baseurl, deviceid, groupid)
+    if groupid != -1:
+        try:
+            response = requests.request("PUT", url, headers=headers)
+            print("Success! Changed OU to %s" % groupid)
+                         
+        except requests.exceptions.RequestException as e:
+            print('Request failed with %s' % e)
+    else:
+        print("Group ID was invalid")
 
-#enter AirWatch user credentials
-auth_cred = getbasic_authuser()
-
-#Build the header after getting credentials
-headers = build_header(aw_tenant_code, accept_type, content_type, auth_cred)
-
-with open('input_serial.csv', 'r') as csvfile:
-    read = csv.reader(csvfile, delimiter=',', quotechar='|')
-    next(read, None) #skip the header in csv
-    for row in read:
-        #name = (row[0]) and serial = (row[1])
-        #store values in dictionary to maintain key value pairs
-        serialnamedict[row[1]] = row[0]
-
-#Traverse the dictionary updating names by doing a serial lookup
-for serialval in serialnamedict:
-    serial = serialval
-    devicename = serialnamedict[serialval]
-    print(serial + ": " + devicename)
-    # Try to make the API call
+def change_devicename(baseurl, devicename, headers, serial):
+    url = "%s/api/mdm/devices"% baseurl
     try:
         # Update device, using SerialNumber as the identifier
         response = requests.request("PUT", url, data=build_payload(devicename), headers=headers, params=build_querystring(serial))
@@ -82,6 +86,78 @@ for serialval in serialnamedict:
         else:
             print("Error, check credentials, api key, or mdm url")
             
-    # If the API call fails
     except requests.exceptions.RequestException as e:
         print('Request failed with %s' % e)
+
+def get_groupid(devicename):
+    #Pre-assigned and hardcoded since we only have a few groups
+    groupid = 0
+    if "fis-stu" in devicename.lower():
+        groupid = 2485
+    elif "she-stu" in devicename.lower():
+        groupid = 2486
+    elif "oca-stu" in devicename.lower():
+        groupid = 2483
+    else:
+        groupid = -1
+        print("%s is either invalid or does not belong to one of the 3 schools"% devicename)
+    return groupid
+
+def ipad_validname(serial):
+    #Check if serial is in master file, returns the devicename if found
+    if serial in masterserialname:
+        devicename = masterserialname[serial]
+    else:
+        devicename = "Not found"
+        
+    return devicename
+
+def load_csv(csvfilename, dictionary):
+    #Loads csv information into memory during session for quicker lookups
+    with open(csvfilename, 'r') as csvfile:
+        read = csv.reader(csvfile, delimiter=',', quotechar='|')
+        next(read, None) #skip the header in csv
+        for row in read:
+            #name = (row[0]) and serial = (row[1])
+            #store values in dictionary to maintain key value pairs
+            dictionary[row[1]] = row[0]
+        
+#
+#Main starts here
+#----------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------
+
+#enter AirWatch user credentials
+auth_cred = getbasic_authuser()
+
+#Build the header after getting credentials
+headers = build_header(aw_tenant_code, accept_type, content_type, auth_cred)
+
+#Load csv files to memory
+load_csv('iPads_SerialName_Full.csv', masterserialname)
+load_csv('input_serial.csv', serialnamedict)
+
+
+#Traverse the serialnamed dictionary updating names by doing a serial lookup
+for serialval in serialnamedict:
+    devicename = ipad_validname(serialval)
+    deviceid = get_deviceid(baseurl, headers, serialval)
+    groupid = get_groupid(devicename)
+    
+    print(serialval + ": " + devicename)
+    
+    if ipad_validname(serialval) != "Not found":
+        #Serial is valid and was found in master file
+        change_devicename(baseurl, devicename, headers, serialval)
+        change_ou(headers, deviceid, groupid)
+        print("Device name changed to %s and moved to %s OU\n" % (devicename, groupid))
+    else:
+        #Serial was not found in master file
+        print("%s not found in master file, logged to error serial list\n"% serialval)
+        errorserial.append(serialval)
+
+if errorserial:
+    #If serials were not found in the master list print the list
+    print("\nSerials that were not found in the master list")
+    print(*errorserial, sep = ", ")
+    
